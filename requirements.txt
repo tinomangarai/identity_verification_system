@@ -1,10 +1,10 @@
-streamlit
-easyocr
-deepface
-opencv-python-headless
-pillow
-insightface
-onnxruntime
-geopy
-matplotlib
-tensorflow
+streamlit==1.32.0
+easyocr==1.7.1
+deepface==0.0.79
+opencv-python-headless==4.9.0.80
+pillow==10.1.0
+insightface==0.7.3
+onnxruntime==1.12.1  # Ensure this version works
+geopy==2.4.1
+matplotlib==3.8.2
+tensorflow==2.10.0  # Use a compatible version
