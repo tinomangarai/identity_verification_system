@@ -3,8 +3,6 @@ easyocr==1.7.1
 deepface==0.0.79
 opencv-python-headless==4.9.0.80
 pillow==10.1.0
-insightface==0.7.3
-onnxruntime==1.11.1  # Adjusted for compatibility
 geopy==2.4.1
 matplotlib==3.8.2
-tensorflow==2.10.0  # Set to a compatible version
+tensorflow==2.12.0
