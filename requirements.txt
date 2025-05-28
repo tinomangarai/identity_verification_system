@@ -4,7 +4,7 @@ deepface==0.0.79
 opencv-python-headless==4.9.0.80
 pillow==10.1.0
 insightface==0.7.3
-onnxruntime==1.15.1  # Updated version
+onnxruntime==1.13.1  # Downgraded for compatibility
 geopy==2.4.1
 matplotlib==3.8.2
-tensorflow==2.11.0  # Compatible version
+tensorflow==2.10.0  # Compatible version
