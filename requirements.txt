@@ -1,0 +1,9 @@
+streamlit
+easyocr
+deepface
+opencv-python-headless
+pillow
+insightface
+onnxruntime
+geopy
+matplotlib
