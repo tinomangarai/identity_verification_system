@@ -1,71 +1,66 @@
 import streamlit as st
 import easyocr
-from deepface import DeepFace
-import insightface
-import cv2
+import face_recognition
 import numpy as np
+import cv2
 from PIL import Image
 import tempfile
 
-# Load models (cached for performance)
+# Load OCR reader
 @st.cache_resource
-def load_models():
-    reader = easyocr.Reader(['en'])
-    face_app = insightface.app.FaceAnalysis(name='buffalo_l')
-    face_app.prepare(ctx_id=-1)  # Use CPU (ctx_id=0 for GPU if supported)
-    return reader, face_app
+def load_ocr():
+    return easyocr.Reader(['en'])
 
-reader, face_app = load_models()
+reader = load_ocr()
 
-# Title
-st.title("🛂 Identity Verification System")
+st.title("🔐 Lightweight Identity Verification System")
 
-# Upload files
-id_image = st.file_uploader("📄 Upload ID Document", type=["jpg", "jpeg", "png"])
-selfie_image = st.file_uploader("🤳 Upload Selfie", type=["jpg", "jpeg", "png"])
+# Upload images
+id_image = st.file_uploader("Upload ID Document", type=["jpg", "jpeg", "png"])
+selfie_image = st.file_uploader("Upload Selfie", type=["jpg", "jpeg", "png"])
 
-# Proceed if both are uploaded
+def load_image(file) -> np.ndarray:
+    return np.array(Image.open(file).convert('RGB'))
+
+# Proceed only when both files are uploaded
 if id_image and selfie_image:
-    # Convert uploaded files to temporary files
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_id, \
-         tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_selfie:
-        tmp_id.write(id_image.getbuffer())
-        tmp_selfie.write(selfie_image.getbuffer())
-        id_path = tmp_id.name
-        selfie_path = tmp_selfie.name
+    id_img_np = load_image(id_image)
+    selfie_img_np = load_image(selfie_image)
 
-    # OCR
-    st.subheader("🔎 OCR Results from ID")
-    ocr_results = reader.readtext(id_path)
-    if ocr_results:
-        for res in ocr_results:
-            st.write(f"- {res[1]}")
-    else:
-        st.warning("No text detected in ID image.")
+    # OCR on ID image
+    st.subheader("🔎 OCR Results")
+    with st.spinner("Reading ID document..."):
+        ocr_result = reader.readtext(id_img_np)
+        if ocr_result:
+            for res in ocr_result:
+                st.write(f"- {res[1]}")
+        else:
+            st.warning("No text detected.")
 
-    # Face Verification
+    # Face verification
     st.subheader("🧑‍🦱 Face Verification")
     try:
-        face_result = DeepFace.verify(img1_path=id_path, img2_path=selfie_path, enforce_detection=False)
-        if face_result.get("verified", False):
-            st.success("✅ Faces match!")
+        id_faces = face_recognition.face_encodings(id_img_np)
+        selfie_faces = face_recognition.face_encodings(selfie_img_np)
+
+        if id_faces and selfie_faces:
+            match_result = face_recognition.compare_faces([id_faces[0]], selfie_faces[0])[0]
+            st.success("✅ Faces match!") if match_result else st.error("❌ Faces don't match.")
         else:
-            st.error("❌ Faces do not match.")
+            st.warning("Face not detected in one or both images.")
     except Exception as e:
-        st.error(f"Face verification failed: {e}")
+        st.error(f"Face recognition failed: {e}")
 
-    # Liveness Detection
-    st.subheader("🧬 Liveness Check")
+    # Simulated liveness check
+    st.subheader("🧬 Simulated Liveness Check")
     try:
-        selfie_np = cv2.imread(selfie_path)
-        selfie_np = cv2.cvtColor(selfie_np, cv2.COLOR_BGR2RGB)
-        faces = face_app.get(selfie_np)
+        selfie_gray = cv2.cvtColor(selfie_img_np, cv2.COLOR_RGB2GRAY)
+        laplacian_var = cv2.Laplacian(selfie_gray, cv2.CV_64F).var()
 
-        if faces:
-            score = faces[0].det_score
-            st.metric("Liveness Score", f"{score:.2f}")
-            st.success("✅ Real face detected") if score > 0.5 else st.error("❌ Possible spoof!")
+        st.metric("Sharpness (Laplacian Variance)", f"{laplacian_var:.2f}")
+        if laplacian_var > 100:
+            st.success("✅ Likely a real (sharp) photo")
         else:
-            st.warning("No face detected for liveness check.")
+            st.warning("⚠️ Image may be blurred or spoofed.")
     except Exception as e:
         st.error(f"Liveness check failed: {e}")
