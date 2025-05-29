@@ -1,66 +1,80 @@
 import streamlit as st
 import easyocr
-import face_recognition
-import numpy as np
 import cv2
+import numpy as np
 from PIL import Image
-import tempfile
+from sklearn.metrics.pairwise import cosine_similarity
 
-# Load OCR reader
+# Load OCR
 @st.cache_resource
 def load_ocr():
     return easyocr.Reader(['en'])
 
 reader = load_ocr()
 
-st.title("🔐 Lightweight Identity Verification System")
+st.title("🔐 Lightweight Identity Verification System (No dlib)")
 
 # Upload images
-id_image = st.file_uploader("Upload ID Document", type=["jpg", "jpeg", "png"])
-selfie_image = st.file_uploader("Upload Selfie", type=["jpg", "jpeg", "png"])
+id_file = st.file_uploader("Upload ID Document", type=["jpg", "jpeg", "png"])
+selfie_file = st.file_uploader("Upload Selfie", type=["jpg", "jpeg", "png"])
 
-def load_image(file) -> np.ndarray:
+# Load images
+def read_image(file):
     return np.array(Image.open(file).convert('RGB'))
 
-# Proceed only when both files are uploaded
-if id_image and selfie_image:
-    id_img_np = load_image(id_image)
-    selfie_img_np = load_image(selfie_image)
+# Detect face using OpenCV's DNN face detector
+def detect_face(image_np):
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+    if len(faces) == 0:
+        return None
+    x, y, w, h = faces[0]
+    return image_np[y:y+h, x:x+w]
 
-    # OCR on ID image
-    st.subheader("🔎 OCR Results")
-    with st.spinner("Reading ID document..."):
-        ocr_result = reader.readtext(id_img_np)
-        if ocr_result:
-            for res in ocr_result:
-                st.write(f"- {res[1]}")
-        else:
-            st.warning("No text detected.")
-
-    # Face verification
-    st.subheader("🧑‍🦱 Face Verification")
+# Compare two face crops using cosine similarity
+def compare_faces(face1, face2):
     try:
-        id_faces = face_recognition.face_encodings(id_img_np)
-        selfie_faces = face_recognition.face_encodings(selfie_img_np)
-
-        if id_faces and selfie_faces:
-            match_result = face_recognition.compare_faces([id_faces[0]], selfie_faces[0])[0]
-            st.success("✅ Faces match!") if match_result else st.error("❌ Faces don't match.")
-        else:
-            st.warning("Face not detected in one or both images.")
+        face1_resized = cv2.resize(face1, (100, 100)).flatten().reshape(1, -1)
+        face2_resized = cv2.resize(face2, (100, 100)).flatten().reshape(1, -1)
+        similarity = cosine_similarity(face1_resized, face2_resized)[0][0]
+        return similarity
     except Exception as e:
-        st.error(f"Face recognition failed: {e}")
+        return None
 
-    # Simulated liveness check
+if id_file and selfie_file:
+    id_img = read_image(id_file)
+    selfie_img = read_image(selfie_file)
+
+    st.subheader("🔎 OCR from ID Document")
+    with st.spinner("Extracting text..."):
+        ocr_results = reader.readtext(id_img)
+        for result in ocr_results:
+            st.write(f"- {result[1]}")
+
+    st.subheader("🧑‍🦱 Face Detection and Verification")
+    face_id = detect_face(id_img)
+    face_selfie = detect_face(selfie_img)
+
+    if face_id is None or face_selfie is None:
+        st.warning("Could not detect face in one of the images.")
+    else:
+        st.image([face_id, face_selfie], caption=["ID Face", "Selfie Face"], width=150)
+
+        score = compare_faces(face_id, face_selfie)
+        if score is not None:
+            st.metric("Cosine Similarity", f"{score:.2f}")
+            if score > 0.8:
+                st.success("✅ Faces likely match.")
+            else:
+                st.error("❌ Faces do not match.")
+        else:
+            st.error("Face comparison failed.")
+
     st.subheader("🧬 Simulated Liveness Check")
-    try:
-        selfie_gray = cv2.cvtColor(selfie_img_np, cv2.COLOR_RGB2GRAY)
-        laplacian_var = cv2.Laplacian(selfie_gray, cv2.CV_64F).var()
-
-        st.metric("Sharpness (Laplacian Variance)", f"{laplacian_var:.2f}")
-        if laplacian_var > 100:
-            st.success("✅ Likely a real (sharp) photo")
-        else:
-            st.warning("⚠️ Image may be blurred or spoofed.")
-    except Exception as e:
-        st.error(f"Liveness check failed: {e}")
+    sharpness = cv2.Laplacian(cv2.cvtColor(selfie_img, cv2.COLOR_RGB2GRAY), cv2.CV_64F).var()
+    st.metric("Sharpness (Laplacian)", f"{sharpness:.2f}")
+    if sharpness > 100:
+        st.success("✅ Image is sharp — likely a live photo.")
+    else:
+        st.warning("⚠️ Image is blurry — may be spoofed.")
