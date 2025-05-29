@@ -1,11 +1,6 @@
-streamlit
-easyocr
-deepface
-opencv-python-headless
-pillow
-insightface
-onnxruntime
-geopy
-matplotlib
-tensorflow
-numpy==1.23.5
+streamlit==1.28.0
+easyocr==1.6.2
+deepface==0.0.79
+insightface==0.7.3
+opencv-python-headless==4.8.0.76
+pillow==10.0.1
