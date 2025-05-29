@@ -2,5 +2,7 @@ streamlit
 easyocr
 deepface
 insightface
-opencv-python-headless
+opencv-python
 pillow
+numpy
+
