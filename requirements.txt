@@ -1,6 +1,6 @@
 streamlit
-face_recognition
 easyocr
 opencv-python-headless
-pillow
+Pillow
+scikit-learn
 numpy
