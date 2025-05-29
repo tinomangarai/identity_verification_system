@@ -12,7 +12,7 @@ def load_ocr():
 
 reader = load_ocr()
 
-st.title("🔐 Lightweight Identity Verification System (No dlib)")
+st.title("🔐 Lightweight Identity Verification System")
 
 # Upload images
 id_file = st.file_uploader("Upload ID Document", type=["jpg", "jpeg", "png"])
