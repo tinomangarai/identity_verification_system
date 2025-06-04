@@ -3,15 +3,13 @@ import easyocr
 import cv2
 import numpy as np
 from PIL import Image
-from deepface import DeepFace
-from deepface.detectors import FaceDetector
+import face_recognition  # Lightweight alternative to DeepFace
 from datetime import datetime, date
 import requests
 import re
 from functools import lru_cache
 import os
 
-# ========== INITIAL SETUP ==========
 # Initialize session state
 if 'address_verified' not in st.session_state:
     st.session_state.address_verified = False
@@ -26,38 +24,41 @@ def load_ocr():
 
 reader = load_ocr()
 
-st.title("🔐 **Enhanced Identity Verification System**")
+st.title("🔐 Enhanced Identity Verification System")
 
-# ========== HELPER FUNCTIONS ==========
+# ========== Helper Functions ==========
 def read_image(file):
     """Load image from file uploader"""
     return np.array(Image.open(file).convert('RGB'))
 
 def detect_face(image_np):
-    """Detect face using OpenCV (no dlib)"""
-    detector = FaceDetector.build_model('opencv')
-    faces = FaceDetector.detect_faces(detector, 'opencv', image_np, align=False)
-    if not faces:
+    """Detect face using face_recognition library"""
+    face_locations = face_recognition.face_locations(image_np)
+    if not face_locations:
         return None
-    x, y, w, h = faces[0][1]  # Get face coordinates
-    return image_np[y:y+h, x:x+w]
+    top, right, bottom, left = face_locations[0]
+    return image_np[top:bottom, left:right]
 
-def verify_faces(id_img, selfie_img):
-    """Compare faces using DeepFace (OpenCV backend)"""
+def compare_faces(face1, face2):
+    """Compare faces using face_recognition"""
     try:
-        # Use OpenCV backend (no dlib required)
-        result = DeepFace.verify(
-            img1_path=id_img,
-            img2_path=selfie_img,
-            model_name='Facenet',  # Lightweight & accurate
-            detector_backend='opencv',
-            distance_metric='cosine',
-            enforce_detection=False
-        )
-        return result['verified'], result['distance']
+        # Convert to RGB (face_recognition expects RGB)
+        face1_rgb = cv2.cvtColor(face1, cv2.COLOR_BGR2RGB)
+        face2_rgb = cv2.cvtColor(face2, cv2.COLOR_BGR2RGB)
+        
+        # Get face encodings
+        encoding1 = face_recognition.face_encodings(face1_rgb)
+        encoding2 = face_recognition.face_encodings(face2_rgb)
+        
+        if not encoding1 or not encoding2:
+            return None
+            
+        # Compare faces with tolerance (lower = more strict)
+        results = face_recognition.compare_faces([encoding1[0]], encoding2[0], tolerance=0.6)
+        return results[0]
     except Exception as e:
-        st.error(f"Face verification error: {str(e)}")
-        return False, 1.0
+        st.error(f"Face comparison error: {str(e)}")
+        return None
 
 def extract_dob(text_list):
     """Extract date of birth from OCR text"""
@@ -108,14 +109,14 @@ def verify_address(street, country, city, state=None, postal=None):
     except Exception as e:
         return False, f"Error: {str(e)}"
 
-# ========== USER INTERFACE ==========
-with st.expander("📝 **Personal Information**", expanded=True):
+# ========== User Interface ==========
+with st.expander("📝 Personal Information", expanded=True):
     col1, col2 = st.columns(2)
     with col1:
         user_dob = st.date_input("Date of Birth", min_value=date(1900, 1, 1))
         if user_dob:
             age = calculate_age(user_dob)
-            st.write(f"**Age:** {age} years")
+            st.write(f"Age: {age} years")
             if age < 18:
                 st.error("Must be 18+ for verification")
     
@@ -142,8 +143,8 @@ with st.expander("📝 **Personal Information**", expanded=True):
             )
             
             if is_valid:
-                st.success("✅ **Address verified**")
-                st.write("**Matched to:**", details)
+                st.success("✅ Address verified")
+                st.write("Matched to:", details)
                 st.session_state.address_verified = True
                 st.session_state.verified_address = details
             else:
@@ -152,26 +153,26 @@ with st.expander("📝 **Personal Information**", expanded=True):
 
 st.divider()
 
-# ========== DOCUMENT VERIFICATION ==========
-st.subheader("📄 **Document Upload**")
+# ========== Document Verification ==========
+st.subheader("📄 Document Upload")
 col1, col2 = st.columns(2)
 with col1:
-    id_file = st.file_uploader("Upload ID Document", type=["jpg", "jpeg", "png"])
+    id_file = st.file_uploader("ID Document", type=["jpg", "jpeg", "png"])
 with col2:
-    selfie_file = st.file_uploader("Upload Selfie", type=["jpg", "jpeg", "png"])
+    selfie_file = st.file_uploader("Selfie Photo", type=["jpg", "jpeg", "png"])
 
 if id_file and selfie_file:
     id_img = read_image(id_file)
     selfie_img = read_image(selfie_file)
 
     # OCR Processing
-    st.subheader("🔍 **ID Document Analysis**")
+    st.subheader("🔍 ID Document Analysis")
     with st.spinner("Extracting text..."):
         ocr_results = reader.readtext(id_img)
         extracted_text = [result[1] for result in ocr_results]
         
         if extracted_text:
-            st.success(f"✅ Extracted {len(extracted_text)} text elements")
+            st.success(f"Extracted {len(extracted_text)} text elements")
             with st.expander("View extracted text"):
                 for text in extracted_text[:10]:
                     st.write(f"- {text}")
@@ -179,12 +180,12 @@ if id_file and selfie_file:
             st.warning("No text found in ID document")
 
     # Face Verification
-    st.subheader("🧑 **Face Verification**")
+    st.subheader("🧑 Face Verification")
     face_id = detect_face(id_img)
     face_selfie = detect_face(selfie_img)
 
     if face_id is None or face_selfie is None:
-        st.error("❌ Could not detect faces in one or both images")
+        st.error("Could not detect faces in one or both images")
     else:
         col1, col2 = st.columns(2)
         with col1:
@@ -193,72 +194,72 @@ if id_file and selfie_file:
             st.image(face_selfie, caption="Selfie Face", use_column_width=True)
         
         with st.spinner("Comparing faces..."):
-            verified, distance = verify_faces(face_id, face_selfie)
-            similarity = (1 - distance) * 100
+            match = compare_faces(face_id, face_selfie)
         
-        if verified:
-            st.success(f"✅ **Faces match! Similarity: {similarity:.2f}%**")
-            st.session_state.face_verified = True
-        else:
-            st.error(f"❌ **Faces don't match. Similarity: {similarity:.2f}%**")
-            st.session_state.face_verified = False
+        if match is not None:
+            if match:
+                st.success("✅ Faces match!")
+                st.session_state.face_verified = True
+            else:
+                st.error("❌ Faces do not match.")
+                st.session_state.face_verified = False
 
     # Age Verification
-    st.subheader("📅 **Age Verification**")
+    st.subheader("📅 Age Verification")
     dob_from_id = extract_dob(extracted_text)
     
     if dob_from_id:
-        st.write(f"**Detected DOB on ID:** {dob_from_id.strftime('%Y-%m-%d')}")
+        st.write(f"Detected DOB on ID: {dob_from_id.strftime('%Y-%m-%d')}")
         age_from_id = calculate_age(dob_from_id)
-        st.write(f"**Age from ID:** {age_from_id} years")
+        st.write(f"Age from ID: {age_from_id} years")
         
         if user_dob:
             age_diff = abs(age_from_id - calculate_age(user_dob))
             if age_diff == 0:
-                st.success("✅ **Exact age match**")
+                st.success("✅ Exact age match")
             elif age_diff <= 1:
-                st.success(f"✅ **Approximate match ({age_diff} year difference)**")
+                st.success(f"✅ Approximate match ({age_diff} year difference)")
             else:
-                st.error(f"❌ **Age mismatch ({age_diff} years difference)**")
+                st.error(f"❌ Age mismatch ({age_diff} years difference)")
         else:
             st.warning("No user-provided DOB for comparison")
     else:
         st.error("Could not extract date of birth from ID")
 
     # Liveness Check
-    st.subheader("🧬 **Liveness Detection**")
+    st.subheader("🧬 Liveness Detection")
     sharpness = cv2.Laplacian(cv2.cvtColor(selfie_img, cv2.COLOR_RGB2GRAY), cv2.CV_64F).var()
     st.metric("Image Sharpness", f"{sharpness:.2f}")
     if sharpness > 100:
-        st.success("✅ **Likely live photo**")
+        st.success("✅ Good sharpness - likely live photo")
     elif sharpness > 50:
-        st.warning("⚠️ **Possible screenshot**")
+        st.warning("⚠️ Moderate sharpness - possible screenshot")
     else:
-        st.error("❌ **Potential spoof**")
+        st.error("❌ Low sharpness - potential spoof")
 
     # Final Verification Summary
     st.divider()
-    st.subheader("🎯 **Verification Summary**")
+    st.subheader("🎯 Verification Summary")
     
     verification_passed = True
     if not st.session_state.face_verified:
         verification_passed = False
-        st.error("❌ **Face verification failed**")
+        st.error("❌ Face verification failed")
     
     if dob_from_id and user_dob and abs(calculate_age(dob_from_id) - calculate_age(user_dob)) > 1:
         verification_passed = False
-        st.error("❌ **Age verification failed**")
+        st.error("❌ Age verification failed")
     
     if not st.session_state.address_verified:
         verification_passed = False
-        st.error("❌ **Address not verified**")
+        st.error("❌ Address not verified")
     
     if sharpness < 50:
         verification_passed = False
-        st.error("❌ **Liveness check failed**")
+        st.error("❌ Liveness check failed")
     
     if verification_passed:
-        st.success("✅ **All verifications passed!**")
+        st.success("✅ All verifications passed!")
         st.balloons()
     else:
-        st.error("❌ **Verification incomplete**")
+        st.error("❌ Verification incomplete - please check failed items")
