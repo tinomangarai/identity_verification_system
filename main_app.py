@@ -36,7 +36,7 @@ def detect_face(image_np):
     if len(faces) == 0:
         return None
     x, y, w, h = faces[0]
-    return image_np[y:y+h, x:x+w]
+    return image_np[y:y+h, x:x+w], (x, y, w, h)
 
 def compare_faces(face1, face2):
     """Compare faces using simple pixel comparison"""
@@ -83,7 +83,7 @@ def verify_address(street, country, city, state=None, postal=None):
         query = f"{street}, {city}, {state}, {postal}, {country}"
         params = {
             'address': query,
-            'key': 'YOUR_GOOGLE_API_KEY'  # Replace with your API key
+            'key': 'AIzaSyBcTIILXOzrXyjYh-BjAWoH0dh_NReVVcw'  # Your API key
         }
         
         response = requests.get("https://maps.googleapis.com/maps/api/geocode/json", params=params)
@@ -167,8 +167,8 @@ if id_file and selfie_file:
 
     # Face Verification
     st.subheader("🧑 Face Verification")
-    face_id = detect_face(id_img)
-    face_selfie = detect_face(selfie_img)
+    face_id, face_id_coords = detect_face(id_img)
+    face_selfie, face_selfie_coords = detect_face(selfie_img)
 
     if face_id is None or face_selfie is None:
         st.error("Could not detect faces in one or both images")
