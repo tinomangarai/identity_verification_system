@@ -121,8 +121,8 @@ with st.expander("📝 Personal Information", expanded=True):
                 st.error("Must be 18+ for verification")
     
     with col2:
-        countries = ["United States", "Canada", "United Kingdom", "Australia", "Germany", "France", "Other"]
-        user_country = st.selectbox("Country", countries, index=0)
+        countries = ["Zimbabwe", "United States", "Canada", "United Kingdom", "Australia", "Germany", "France", "Other"]
+        user_country = st.selectbox("Country", countries, index=0)  # Default to Zimbabwe
     
     user_address = st.text_input("Street Address")
     col1, col2 = st.columns(2)
