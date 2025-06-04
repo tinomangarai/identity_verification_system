@@ -3,17 +3,14 @@ import easyocr
 import cv2
 import numpy as np
 from PIL import Image
-import face_recognition  # Lightweight alternative to DeepFace
 from datetime import datetime, date
 import requests
 import re
 from functools import lru_cache
-import os
 
 # Initialize session state
 if 'address_verified' not in st.session_state:
     st.session_state.address_verified = False
-    st.session_state.verified_address = None
 if 'face_verified' not in st.session_state:
     st.session_state.face_verified = False
 
@@ -32,33 +29,23 @@ def read_image(file):
     return np.array(Image.open(file).convert('RGB'))
 
 def detect_face(image_np):
-    """Detect face using face_recognition library"""
-    face_locations = face_recognition.face_locations(image_np)
-    if not face_locations:
+    """Detect face using OpenCV Haar Cascade"""
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+    if len(faces) == 0:
         return None
-    top, right, bottom, left = face_locations[0]
-    return image_np[top:bottom, left:right]
+    x, y, w, h = faces[0]
+    return image_np[y:y+h, x:x+w]
 
 def compare_faces(face1, face2):
-    """Compare faces using face_recognition"""
-    try:
-        # Convert to RGB (face_recognition expects RGB)
-        face1_rgb = cv2.cvtColor(face1, cv2.COLOR_BGR2RGB)
-        face2_rgb = cv2.cvtColor(face2, cv2.COLOR_BGR2RGB)
-        
-        # Get face encodings
-        encoding1 = face_recognition.face_encodings(face1_rgb)
-        encoding2 = face_recognition.face_encodings(face2_rgb)
-        
-        if not encoding1 or not encoding2:
-            return None
-            
-        # Compare faces with tolerance (lower = more strict)
-        results = face_recognition.compare_faces([encoding1[0]], encoding2[0], tolerance=0.6)
-        return results[0]
-    except Exception as e:
-        st.error(f"Face comparison error: {str(e)}")
-        return None
+    """Compare faces using simple pixel comparison"""
+    face1_resized = cv2.resize(face1, (100, 100))
+    face2_resized = cv2.resize(face2, (100, 100))
+    difference = cv2.absdiff(face1_resized, face2_resized)
+    similarity = np.sum(difference) / (100 * 100 * 3)  # Average pixel difference
+    threshold = 50  # Set a threshold for matching
+    return similarity < threshold
 
 def extract_dob(text_list):
     """Extract date of birth from OCR text"""
@@ -146,7 +133,6 @@ with st.expander("📝 Personal Information", expanded=True):
                 st.success("✅ Address verified")
                 st.write("Matched to:", details)
                 st.session_state.address_verified = True
-                st.session_state.verified_address = details
             else:
                 st.error(f"❌ {details}")
                 st.session_state.address_verified = False
@@ -238,7 +224,6 @@ if id_file and selfie_file:
         st.error("❌ Low sharpness - potential spoof")
 
     # Final Verification Summary
-    st.divider()
     st.subheader("🎯 Verification Summary")
     
     verification_passed = True
