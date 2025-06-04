@@ -189,9 +189,9 @@ if id_file and selfie_file:
     else:
         col1, col2 = st.columns(2)
         with col1:
-            st.image(face_id, caption="ID Photo Face", width=300)  # Fixed width for visibility
+            st.image(face_id, caption="ID Photo Face", width=300)  # Adjusted width for visibility
         with col2:
-            st.image(face_selfie, caption="Selfie Face", width=300)  # Fixed width for visibility
+            st.image(face_selfie, caption="Selfie Face", width=300)  # Adjusted width for visibility
         
         with st.spinner("Comparing faces..."):
             match = compare_faces(face_id, face_selfie)
