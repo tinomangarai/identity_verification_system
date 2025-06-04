@@ -1,7 +1,7 @@
 streamlit
-deepface
 easyocr
-opencv-python-headless
-Pillow
-scikit-learn
+opencv-python
+pillow
 numpy
+requests
+face_recognition  
