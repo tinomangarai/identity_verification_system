@@ -143,9 +143,9 @@ st.divider()
 st.subheader("📄 Document Upload")
 col1, col2 = st.columns(2)
 with col1:
-    id_file = st.file_uploader("ID Document", type=["jpg", "jpeg", "png"])
+    id_file = st.file_uploader("ID Document", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
 with col2:
-    selfie_file = st.file_uploader("Selfie Photo", type=["jpg", "jpeg", "png"])
+    selfie_file = st.file_uploader("Selfie Photo", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
 
 if id_file and selfie_file:
     id_img = read_image(id_file)
@@ -167,17 +167,17 @@ if id_file and selfie_file:
 
     # Face Verification
     st.subheader("🧑 Face Verification")
-    face_id, face_id_coords = detect_face(id_img)
-    face_selfie, face_selfie_coords = detect_face(selfie_img)
+    face_id, _ = detect_face(id_img)
+    face_selfie, _ = detect_face(selfie_img)
 
     if face_id is None or face_selfie is None:
         st.error("Could not detect faces in one or both images")
     else:
         col1, col2 = st.columns(2)
         with col1:
-            st.image(face_id, caption="ID Photo Face", use_column_width=True)
+            st.image(face_id, caption="ID Photo Face", use_container_width=True)
         with col2:
-            st.image(face_selfie, caption="Selfie Face", use_column_width=True)
+            st.image(face_selfie, caption="Selfie Face", use_container_width=True)
         
         with st.spinner("Comparing faces..."):
             match = compare_faces(face_id, face_selfie)
