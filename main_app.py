@@ -3,11 +3,12 @@ import easyocr
 import cv2
 import numpy as np
 from PIL import Image
-from deepface import DeepFace
+import face_recognition  # Replaced DeepFace
 from datetime import datetime, date
 import requests
 import re
 from functools import lru_cache
+import os
 
 # Initialize session state
 if 'address_verified' not in st.session_state:
@@ -29,20 +30,30 @@ def read_image(file):
     return np.array(Image.open(file).convert('RGB'))
 
 def detect_face(image_np):
-    """Detect face using OpenCV Haar Cascade"""
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-    if len(faces) == 0:
+    """Detect face using face_recognition library"""
+    face_locations = face_recognition.face_locations(image_np)
+    if not face_locations:
         return None
-    x, y, w, h = faces[0]
-    return image_np[y:y+h, x:x+w]
+    top, right, bottom, left = face_locations[0]
+    return image_np[top:bottom, left:right]
 
 def compare_faces(face1, face2):
-    """Compare faces using DeepFace"""
+    """Compare faces using face_recognition library"""
     try:
-        result = DeepFace.verify(face1, face2, model_name='VGG-Face')
-        return result['verified']
+        # Convert to RGB (face_recognition expects RGB)
+        face1_rgb = cv2.cvtColor(face1, cv2.COLOR_BGR2RGB)
+        face2_rgb = cv2.cvtColor(face2, cv2.COLOR_BGR2RGB)
+        
+        # Get face encodings
+        encoding1 = face_recognition.face_encodings(face1_rgb)
+        encoding2 = face_recognition.face_encodings(face2_rgb)
+        
+        if not encoding1 or not encoding2:
+            return None
+            
+        # Compare faces with tolerance (lower = more strict)
+        results = face_recognition.compare_faces([encoding1[0]], encoding2[0], tolerance=0.6)
+        return results[0]
     except Exception as e:
         st.error(f"Face comparison error: {str(e)}")
         return None
@@ -209,7 +220,9 @@ if id_file and selfie_file:
         with col2:
             st.image(face_selfie, caption="Selfie Face", use_container_width=True)
         
-        match = compare_faces(face_id, face_selfie)
+        with st.spinner("Comparing faces..."):
+            match = compare_faces(face_id, face_selfie)
+        
         if match is not None:
             if match:
                 st.success("✅ Faces match!")
