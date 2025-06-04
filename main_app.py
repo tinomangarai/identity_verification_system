@@ -9,6 +9,8 @@ import pytz
 import requests
 import re
 from dateutil.relativedelta import relativedelta
+import time
+from functools import lru_cache
 
 # Initialize session state
 if 'address_verified' not in st.session_state:
@@ -80,9 +82,13 @@ def calculate_age(dob):
     today = date.today()
     return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
+@lru_cache(maxsize=100)
 def verify_address(street, country, city, state=None, postal=None):
-    """Validate address using Nominatim API"""
+    """Validate address using Nominatim API with retries and better error handling"""
     try:
+        # Rate limiting - be kind to Nominatim servers
+        time.sleep(1)  # Respect Nominatim's 1 request per second policy
+        
         # Clean and format address components
         street = street.strip() if street else None
         city = city.strip() if city else None
@@ -91,7 +97,7 @@ def verify_address(street, country, city, state=None, postal=None):
         postal = postal.strip() if postal else None
         
         if not all([street, city, country]):
-            return False, "Missing required address components"
+            return False, "Missing required address components (Street, City, Country)"
 
         query_parts = {
             'street': street,
@@ -104,18 +110,46 @@ def verify_address(street, country, city, state=None, postal=None):
         }
         query = {k: v for k, v in query_parts.items() if v}
         
-        headers = {'User-Agent': 'IDVerificationApp/1.0'}
-        response = requests.get(
+        headers = {
+            'User-Agent': 'IDVerificationApp/1.0 (contact@yourdomain.com)',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
+
+        # Try multiple endpoints with retries
+        base_urls = [
             "https://nominatim.openstreetmap.org/search",
-            params=query,
-            headers=headers
-        )
-        response.raise_for_status()
+            "https://nominatim.openstreetmap.org/search.php"
+        ]
+
+        last_error = None
+        for base_url in base_urls:
+            try:
+                response = requests.get(
+                    base_url,
+                    params=query,
+                    headers=headers,
+                    timeout=10  # Don't wait forever
+                )
+                
+                # Check for rate limiting
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get('Retry-After', 5))
+                    time.sleep(retry_after)
+                    response = requests.get(base_url, params=query, headers=headers, timeout=10)
+                
+                response.raise_for_status()
+                
+                data = response.json()
+                if data:
+                    return True, data[0]['display_name']
+                return False, "Address not found in database"
+                
+            except requests.exceptions.RequestException as e:
+                last_error = str(e)
+                continue  # Try next URL if available
         
-        data = response.json()
-        if data:
-            return True, data[0]['display_name']
-        return False, "Address not found in database"
+        return False, f"Could not connect to verification service: {last_error}"
+
     except Exception as e:
         return False, f"Verification error: {str(e)}"
 
@@ -134,14 +168,14 @@ with st.expander("📝 Personal Information", expanded=True):
         countries = ["Zimbabwe", "United States", "Canada", "United Kingdom", "Australia", "Germany", "France", "Other"]
         user_country = st.selectbox("Country", countries, index=0)  # Default to Zimbabwe
     
-    user_address = st.text_input("Street Address")
+    user_address = st.text_input("Street Address (e.g., 123 Main St)")
     col1, col2 = st.columns(2)
     with col1:
-        user_city = st.text_input("City")
+        user_city = st.text_input("City (e.g., Harare)")
     with col2:
-        user_state = st.text_input("State/Province (if applicable)")
+        user_state = st.text_input("State/Province (optional)")
     
-    user_postal = st.text_input("Postal/Zip Code")
+    user_postal = st.text_input("Postal/Zip Code (optional)")
     
     if st.button("Verify Address"):
         # Check if required fields are not empty
@@ -152,14 +186,19 @@ with st.expander("📝 Personal Information", expanded=True):
         elif not user_country:
             st.warning("Please select a Country")
         else:
-            with st.spinner("Validating address..."):
+            with st.spinner("Validating address (this may take a few seconds)..."):
+                # Clear any previous verification state
+                st.session_state.address_verified = False
+                st.session_state.verified_address = None
+                
                 is_valid, details = verify_address(
                     user_address,
                     user_country,
                     user_city,
-                    user_state if user_state.strip() else None,
-                    user_postal if user_postal.strip() else None
+                    user_state if user_state and user_state.strip() else None,
+                    user_postal if user_postal and user_postal.strip() else None
                 )
+                
                 if is_valid:
                     st.success("✅ Address verified")
                     st.write("Matched to:", details)
@@ -167,6 +206,10 @@ with st.expander("📝 Personal Information", expanded=True):
                     st.session_state.verified_address = details
                 else:
                     st.error(f"❌ {details}")
+                    if "Could not connect" in details:
+                        st.info("ℹ️ Please check your internet connection and try again later")
+                    elif "not found" in details.lower():
+                        st.info("ℹ️ Try being more specific with your address details")
                     st.session_state.address_verified = False
 
 st.divider()
