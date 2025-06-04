@@ -25,8 +25,16 @@ st.title("🔐 Enhanced Identity Verification System")
 
 # ========== Helper Functions ==========
 def read_image(file):
-    """Load image from file uploader"""
-    return np.array(Image.open(file).convert('RGB'))
+    """Load image from file uploader and resize it"""
+    image = np.array(Image.open(file).convert('RGB'))
+    # Resize image to a maximum width or height of 800 pixels
+    max_size = 800
+    height, width, _ = image.shape
+    if height > max_size or width > max_size:
+        scale = max_size / max(height, width)
+        new_size = (int(width * scale), int(height * scale))
+        image = cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+    return image
 
 def detect_face(image_np):
     """Detect face using OpenCV Haar Cascade"""
@@ -175,9 +183,9 @@ if id_file and selfie_file:
     else:
         col1, col2 = st.columns(2)
         with col1:
-            st.image(face_id, caption="ID Photo Face", use_column_width=True)
+            st.image(face_id, caption="ID Photo Face", use_container_width=True)
         with col2:
-            st.image(face_selfie, caption="Selfie Face", use_column_width=True)
+            st.image(face_selfie, caption="Selfie Face", use_container_width=True)
         
         with st.spinner("Comparing faces..."):
             match = compare_faces(face_id, face_selfie)
