@@ -84,11 +84,8 @@ def calculate_age(dob):
 
 @lru_cache(maxsize=100)
 def verify_address(street, country, city, state=None, postal=None):
-    """Validate address using Nominatim API with retries and better error handling"""
+    """Validate address using a reliable API"""
     try:
-        # Rate limiting - be kind to Nominatim servers
-        time.sleep(1)  # Respect Nominatim's 1 request per second policy
-        
         # Clean and format address components
         street = street.strip() if street else None
         city = city.strip() if city else None
@@ -109,49 +106,28 @@ def verify_address(street, country, city, state=None, postal=None):
             'limit': 1
         }
         query = {k: v for k, v in query_parts.items() if v}
-        
+
         headers = {
             'User-Agent': 'IDVerificationApp/1.0 (contact@yourdomain.com)',
             'Accept-Language': 'en-US,en;q=0.9'
         }
 
-        # Try multiple endpoints with retries
-        base_urls = [
-            "https://nominatim.openstreetmap.org/search",
-            "https://nominatim.openstreetmap.org/search.php"
-        ]
-
-        last_error = None
-        for base_url in base_urls:
-            try:
-                response = requests.get(
-                    base_url,
-                    params=query,
-                    headers=headers,
-                    timeout=10  # Don't wait forever
-                )
-                
-                # Check for rate limiting
-                if response.status_code == 429:
-                    retry_after = int(response.headers.get('Retry-After', 5))
-                    time.sleep(retry_after)
-                    response = requests.get(base_url, params=query, headers=headers, timeout=10)
-                
-                response.raise_for_status()
-                
-                data = response.json()
-                if data:
-                    return True, data[0]['display_name']
-                return False, "Address not found in database"
-                
-            except requests.exceptions.RequestException as e:
-                last_error = str(e)
-                continue  # Try next URL if available
+        # Using a reliable address validation service
+        response = requests.get(
+            "https://api.positionstack.com/v1/forward",
+            params={**query, 'access_key': 'YOUR_ACCESS_KEY'},
+            headers=headers,
+            timeout=10
+        )
         
-        return False, f"Could not connect to verification service: {last_error}"
+        response.raise_for_status()
+        data = response.json()
+        if data.get('data'):
+            return True, data['data'][0]['label']
+        return False, "Address not found in database"
 
-    except Exception as e:
-        return False, f"Verification error: {str(e)}"
+    except requests.exceptions.RequestException as e:
+        return False, f"Could not connect to verification service: {str(e)}"
 
 # ========== User Interface ==========
 with st.expander("📝 Personal Information", expanded=True):
@@ -250,9 +226,9 @@ if id_file and selfie_file:
     else:
         col1, col2 = st.columns(2)
         with col1:
-            st.image(face_id, caption="ID Photo Face", use_column_width=True)
+            st.image(face_id, caption="ID Photo Face", use_container_width=True)
         with col2:
-            st.image(face_selfie, caption="Selfie Face", use_column_width=True)
+            st.image(face_selfie, caption="Selfie Face", use_container_width=True)
         
         similarity = compare_faces(face_id, face_selfie)
         if similarity is not None:
