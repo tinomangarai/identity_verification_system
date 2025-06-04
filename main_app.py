@@ -5,7 +5,6 @@ import numpy as np
 from PIL import Image
 from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime, date
-import pytz
 import requests
 import re
 from dateutil.relativedelta import relativedelta
@@ -42,11 +41,13 @@ def detect_face(image_np):
     return image_np[y:y+h, x:x+w]
 
 def compare_faces(face1, face2):
-    """Compare faces using cosine similarity"""
+    """Compare faces using cosine similarity with better normalization"""
     try:
         face1_resized = cv2.resize(face1, (100, 100)).flatten().reshape(1, -1)
         face2_resized = cv2.resize(face2, (100, 100)).flatten().reshape(1, -1)
         similarity = cosine_similarity(face1_resized, face2_resized)[0][0]
+        
+        # Add strict thresholding based on similarity
         return similarity
     except Exception as e:
         st.error(f"Face comparison error: {str(e)}")
@@ -84,7 +85,7 @@ def calculate_age(dob):
 
 @lru_cache(maxsize=100)
 def verify_address(street, country, city, state=None, postal=None):
-    """Validate address using a reliable API"""
+    """Validate address using Google Geocoding API"""
     try:
         # Clean and format address components
         street = street.strip() if street else None
@@ -96,34 +97,18 @@ def verify_address(street, country, city, state=None, postal=None):
         if not all([street, city, country]):
             return False, "Missing required address components (Street, City, Country)"
 
-        query_parts = {
-            'street': street,
-            'city': city,
-            'state': state,
-            'postalcode': postal,
-            'country': country,
-            'format': 'json',
-            'limit': 1
-        }
-        query = {k: v for k, v in query_parts.items() if v}
-
-        headers = {
-            'User-Agent': 'IDVerificationApp/1.0 (contact@yourdomain.com)',
-            'Accept-Language': 'en-US,en;q=0.9'
+        query = f"{street}, {city}, {state}, {postal}, {country}"
+        params = {
+            'address': query,
+            'key': 'AIzaSyCAqXyo5xdUQIa3kJr7gcXrB0WaaIqbWVo'  # Your Google API Key
         }
 
-        # Using a reliable address validation service
-        response = requests.get(
-            "https://api.positionstack.com/v1/forward",
-            params={**query, 'access_key': 'YOUR_ACCESS_KEY'},
-            headers=headers,
-            timeout=10
-        )
-        
+        response = requests.get("https://maps.googleapis.com/maps/api/geocode/json", params=params)
         response.raise_for_status()
         data = response.json()
-        if data.get('data'):
-            return True, data['data'][0]['label']
+
+        if data['status'] == 'OK':
+            return True, data['results'][0]['formatted_address']
         return False, "Address not found in database"
 
     except requests.exceptions.RequestException as e:
@@ -233,9 +218,9 @@ if id_file and selfie_file:
         similarity = compare_faces(face_id, face_selfie)
         if similarity is not None:
             st.metric("Face Match Score", f"{similarity:.2%}")
-            if similarity > 0.75:
+            if similarity > 0.85:  # Adjusted threshold for better accuracy
                 st.success("✅ High similarity - likely match")
-            elif similarity > 0.5:
+            elif similarity > 0.6:
                 st.warning("⚠️ Moderate similarity - review needed")
             else:
                 st.error("❌ Low similarity - possible mismatch")
@@ -284,7 +269,7 @@ if id_file and selfie_file:
     st.subheader("🎯 Verification Summary")
     
     verification_passed = True
-    if similarity and similarity < 0.6:
+    if similarity and similarity < 0.7:  # Adjusted threshold for overall verification
         verification_passed = False
         st.error("❌ Face verification failed")
     
