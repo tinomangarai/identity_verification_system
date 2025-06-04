@@ -29,11 +29,17 @@ def read_image(file):
     image = np.array(Image.open(file).convert('RGB'))
     # Resize image to a maximum width or height of 800 pixels
     max_size = 800
+    min_size = 100  # Minimum size to prevent very small images
     height, width, _ = image.shape
     if height > max_size or width > max_size:
         scale = max_size / max(height, width)
         new_size = (int(width * scale), int(height * scale))
         image = cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+    
+    # Ensure image is not smaller than the minimum size
+    if height < min_size or width < min_size:
+        image = cv2.resize(image, (min_size, min_size), interpolation=cv2.INTER_AREA)
+    
     return image
 
 def detect_face(image_np):
@@ -183,9 +189,9 @@ if id_file and selfie_file:
     else:
         col1, col2 = st.columns(2)
         with col1:
-            st.image(face_id, caption="ID Photo Face", use_container_width=True)
+            st.image(face_id, caption="ID Photo Face", width=300)  # Fixed width for visibility
         with col2:
-            st.image(face_selfie, caption="Selfie Face", use_container_width=True)
+            st.image(face_selfie, caption="Selfie Face", width=300)  # Fixed width for visibility
         
         with st.spinner("Comparing faces..."):
             match = compare_faces(face_id, face_selfie)
