@@ -1,4 +1,5 @@
 streamlit
+deepface
 easyocr
 opencv-python-headless
 Pillow
