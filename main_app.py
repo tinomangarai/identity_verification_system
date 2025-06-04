@@ -83,6 +83,16 @@ def calculate_age(dob):
 def verify_address(street, country, city, state=None, postal=None):
     """Validate address using Nominatim API"""
     try:
+        # Clean and format address components
+        street = street.strip() if street else None
+        city = city.strip() if city else None
+        country = country.strip() if isinstance(country, str) else str(country)
+        state = state.strip() if state else None
+        postal = postal.strip() if postal else None
+        
+        if not all([street, city, country]):
+            return False, "Missing required address components"
+
         query_parts = {
             'street': street,
             'city': city,
@@ -135,16 +145,20 @@ with st.expander("📝 Personal Information", expanded=True):
     
     if st.button("Verify Address"):
         # Check if required fields are not empty
-        if not user_address.strip() or not user_city.strip() or not user_country:
-            st.warning("Please fill in required fields (Street, City, Country)")
+        if not user_address.strip():
+            st.warning("Please fill in the Street field")
+        elif not user_city.strip():
+            st.warning("Please fill in the City field")
+        elif not user_country:
+            st.warning("Please select a Country")
         else:
             with st.spinner("Validating address..."):
                 is_valid, details = verify_address(
                     user_address,
                     user_country,
                     user_city,
-                    user_state if user_state else None,
-                    user_postal if user_postal else None
+                    user_state if user_state.strip() else None,
+                    user_postal if user_postal.strip() else None
                 )
                 if is_valid:
                     st.success("✅ Address verified")
