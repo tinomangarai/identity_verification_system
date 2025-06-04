@@ -3,7 +3,7 @@ import easyocr
 import cv2
 import numpy as np
 from PIL import Image
-from sklearn.metrics.pairwise import cosine_similarity
+from deepface import DeepFace
 from datetime import datetime, date
 import requests
 import re
@@ -39,11 +39,13 @@ def detect_face(image_np):
     return image_np[y:y+h, x:x+w]
 
 def compare_faces(face1, face2):
-    """Compare faces using cosine similarity"""
-    face1_resized = cv2.resize(face1, (100, 100)).flatten().reshape(1, -1)
-    face2_resized = cv2.resize(face2, (100, 100)).flatten().reshape(1, -1)
-    similarity = cosine_similarity(face1_resized, face2_resized)[0][0]
-    return similarity
+    """Compare faces using DeepFace"""
+    try:
+        result = DeepFace.verify(face1, face2, model_name='VGG-Face')
+        return result['verified']
+    except Exception as e:
+        st.error(f"Face comparison error: {str(e)}")
+        return None
 
 def extract_dob(text_list):
     """Improved date of birth extraction with multiple patterns"""
@@ -207,15 +209,12 @@ if id_file and selfie_file:
         with col2:
             st.image(face_selfie, caption="Selfie Face", use_container_width=True)
         
-        similarity = compare_faces(face_id, face_selfie)
-        if similarity is not None:
-            st.metric("Face Match Score", f"{similarity:.2%}")
-            if similarity > 0.85:  # Adjusted threshold for better accuracy
-                st.success("✅ High similarity - likely match")
-            elif similarity > 0.6:
-                st.warning("⚠️ Moderate similarity - review needed")
+        match = compare_faces(face_id, face_selfie)
+        if match is not None:
+            if match:
+                st.success("✅ Faces match!")
             else:
-                st.error("❌ Low similarity - possible mismatch")
+                st.error("❌ Faces do not match.")
 
     # Age Verification
     st.subheader("📅 Age Verification")
@@ -261,7 +260,7 @@ if id_file and selfie_file:
     st.subheader("🎯 Verification Summary")
     
     verification_passed = True
-    if similarity and similarity < 0.7:  # Adjusted threshold for overall verification
+    if match is False:
         verification_passed = False
         st.error("❌ Face verification failed")
     
