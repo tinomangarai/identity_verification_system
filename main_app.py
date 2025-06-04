@@ -3,12 +3,10 @@ import easyocr
 import cv2
 import numpy as np
 from PIL import Image
-import face_recognition
+from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime, date
 import requests
 import re
-from dateutil.relativedelta import relativedelta
-import time
 from functools import lru_cache
 
 # Initialize session state
@@ -31,22 +29,21 @@ def read_image(file):
     return np.array(Image.open(file).convert('RGB'))
 
 def detect_face(image_np):
-    """Detect face using face_recognition library"""
-    face_locations = face_recognition.face_locations(image_np)
-    if len(face_locations) == 0:
+    """Detect face using OpenCV Haar Cascade"""
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+    if len(faces) == 0:
         return None
-    top, right, bottom, left = face_locations[0]
-    return image_np[top:bottom, left:right]
+    x, y, w, h = faces[0]
+    return image_np[y:y+h, x:x+w]
 
 def compare_faces(face1, face2):
-    """Compare faces using face_recognition library"""
-    face_encodings1 = face_recognition.face_encodings(face1)
-    face_encodings2 = face_recognition.face_encodings(face2)
-
-    if not face_encodings1 or not face_encodings2:
-        return None
-
-    return face_recognition.compare_faces([face_encodings1[0]], face_encodings2[0])[0]
+    """Compare faces using cosine similarity"""
+    face1_resized = cv2.resize(face1, (100, 100)).flatten().reshape(1, -1)
+    face2_resized = cv2.resize(face2, (100, 100)).flatten().reshape(1, -1)
+    similarity = cosine_similarity(face1_resized, face2_resized)[0][0]
+    return similarity
 
 def extract_dob(text_list):
     """Improved date of birth extraction with multiple patterns"""
@@ -210,12 +207,15 @@ if id_file and selfie_file:
         with col2:
             st.image(face_selfie, caption="Selfie Face", use_container_width=True)
         
-        match = compare_faces(face_id, face_selfie)
-        if match is not None:
-            if match:
-                st.success("✅ Faces match!")
+        similarity = compare_faces(face_id, face_selfie)
+        if similarity is not None:
+            st.metric("Face Match Score", f"{similarity:.2%}")
+            if similarity > 0.85:  # Adjusted threshold for better accuracy
+                st.success("✅ High similarity - likely match")
+            elif similarity > 0.6:
+                st.warning("⚠️ Moderate similarity - review needed")
             else:
-                st.error("❌ Faces do not match.")
+                st.error("❌ Low similarity - possible mismatch")
 
     # Age Verification
     st.subheader("📅 Age Verification")
@@ -261,7 +261,7 @@ if id_file and selfie_file:
     st.subheader("🎯 Verification Summary")
     
     verification_passed = True
-    if not match:
+    if similarity and similarity < 0.7:  # Adjusted threshold for overall verification
         verification_passed = False
         st.error("❌ Face verification failed")
     
