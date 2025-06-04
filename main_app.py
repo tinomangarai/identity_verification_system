@@ -134,7 +134,8 @@ with st.expander("📝 Personal Information", expanded=True):
     user_postal = st.text_input("Postal/Zip Code")
     
     if st.button("Verify Address"):
-        if not all([user_address, user_city, user_country]):
+        # Check if required fields are not empty
+        if not user_address.strip() or not user_city.strip() or not user_country:
             st.warning("Please fill in required fields (Street, City, Country)")
         else:
             with st.spinner("Validating address..."):
