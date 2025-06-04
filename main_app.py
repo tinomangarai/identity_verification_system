@@ -46,8 +46,6 @@ def compare_faces(face1, face2):
         face1_resized = cv2.resize(face1, (100, 100)).flatten().reshape(1, -1)
         face2_resized = cv2.resize(face2, (100, 100)).flatten().reshape(1, -1)
         similarity = cosine_similarity(face1_resized, face2_resized)[0][0]
-        
-        # Add strict thresholding based on similarity
         return similarity
     except Exception as e:
         st.error(f"Face comparison error: {str(e)}")
