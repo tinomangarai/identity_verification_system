@@ -4,4 +4,4 @@ opencv-python
 pillow
 numpy
 requests
-deepface
+deepface==0.0.79
